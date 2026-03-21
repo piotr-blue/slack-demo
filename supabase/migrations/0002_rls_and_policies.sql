@@ -80,7 +80,16 @@ create policy account_members_insert_member
 on account_members
 for insert
 to authenticated
-with check (public.is_account_member(account_id) or user_id = auth.uid());
+with check (
+  public.is_account_member(account_id)
+  or exists (
+    select 1
+    from accounts a
+    where a.id = account_members.account_id
+      and a.created_by_user_id = auth.uid()
+      and account_members.user_id = auth.uid()
+  )
+);
 
 drop policy if exists chats_select_member on chats;
 create policy chats_select_member

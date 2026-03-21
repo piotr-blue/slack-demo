@@ -1,4 +1,4 @@
-import { send } from "@vercel/queue";
+import { QueueClient } from "@vercel/queue";
 
 export const QUEUE_TOPICS = {
   slackInbound: "slack-inbound",
@@ -18,6 +18,12 @@ export type SlackProvisionQueuePayload = {
   chatId: string;
 };
 
+const queueClient = new QueueClient({
+  region: process.env.VERCEL_REGION ?? "iad1",
+});
+
+export const handleQueueCallback = queueClient.handleCallback;
+
 async function sendMessage<T>(
   topic: string,
   payload: T,
@@ -30,10 +36,7 @@ async function sendMessage<T>(
     return { messageId: `${topic}-noop` };
   }
 
-  return send(topic, payload, {
-    ...options,
-    region: process.env.VERCEL_REGION ?? "iad1",
-  });
+  return queueClient.send(topic, payload, options);
 }
 
 export function enqueueSlackInbound(

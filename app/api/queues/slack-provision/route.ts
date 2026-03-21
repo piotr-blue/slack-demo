@@ -1,10 +1,13 @@
-import { handleCallback } from "@vercel/queue";
-import { enqueueSlackProvision, type SlackProvisionQueuePayload } from "@/lib/queue";
+import {
+  enqueueSlackProvision,
+  handleQueueCallback,
+  type SlackProvisionQueuePayload,
+} from "@/lib/queue";
 import { provisionSlackChannelForChat } from "@/lib/slack/provision";
 
 export const runtime = "nodejs";
 
-export const POST = handleCallback<SlackProvisionQueuePayload>(async (message) => {
+export const POST = handleQueueCallback<SlackProvisionQueuePayload>(async (message) => {
   try {
     await provisionSlackChannelForChat(message.chatId);
   } catch {
