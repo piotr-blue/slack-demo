@@ -29,12 +29,18 @@ export default async function AccountChatsPage({
   const chats = await listChatsForAccount(account.id);
   const activeChatId = chatId ?? chats[0]?.id ?? null;
   const activeChat = activeChatId ? await getChatForUser(user.id, activeChatId) : null;
+  const initialPageSize = 30;
 
   const messages = activeChat
-    ? await listMessagesForChat({ userId: user.id, chatId: activeChat.id, limit: 50 })
+    ? await listMessagesForChat({
+        userId: user.id,
+        chatId: activeChat.id,
+        limit: initialPageSize,
+      })
     : [];
 
   const orderedMessages = [...messages].reverse();
+  const initialHasMoreMessages = messages.length === initialPageSize;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
@@ -58,7 +64,12 @@ export default async function AccountChatsPage({
         </CardHeader>
         <CardContent>
           {activeChat ? (
-            <ChatView chatId={activeChat.id} initialMessages={orderedMessages} />
+            <ChatView
+              chatId={activeChat.id}
+              initialMessages={orderedMessages}
+              initialHasMore={initialHasMoreMessages}
+              pageSize={initialPageSize}
+            />
           ) : (
             <p className="text-sm text-slate-500">Create your first chat to get started.</p>
           )}
