@@ -1,0 +1,28 @@
+_metadata:
+  major_version: 1
+  minor_version: 1
+display_information:
+  name: slack-demo-app
+features:
+  bot_user:
+    display_name: slack-demo-app
+    always_online: false
+oauth_config:
+  redirect_urls:
+    - https://YOUR_APP_DOMAIN/api/slack/oauth/callback
+  scopes:
+    bot:
+      - chat:write
+      - channels:manage
+      - channels:read
+      - channels:history
+settings:
+  event_subscriptions:
+    request_url: https://YOUR_APP_DOMAIN/api/slack/events
+    bot_events:
+      - message.channels
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
