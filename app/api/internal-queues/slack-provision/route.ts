@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertInternalQueueSecret } from "@/lib/queue-internal";
-import { enqueueSlackProvision } from "@/lib/queue";
 import { provisionSlackChannelForChat } from "@/lib/slack/provision";
 
 const schema = z.object({
@@ -25,17 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  try {
-    await provisionSlackChannelForChat(parsed.data.message.chatId);
-  } catch {
-    await enqueueSlackProvision(
-      { chatId: parsed.data.message.chatId },
-      {
-        delaySeconds: 30,
-        idempotencyKey: `provision:${parsed.data.message.chatId}:${Date.now()}`,
-      },
-    );
-  }
+  const result = await provisionSlackChannelForChat(parsed.data.message.chatId);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, result });
 }

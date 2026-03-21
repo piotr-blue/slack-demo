@@ -96,10 +96,11 @@ export async function provisionSlackChannelForChat(chatId: string) {
     accountSlug: context.account_slug,
     chatSlug: context.chat_slug,
   });
-  const botToken = decryptSecret(context.bot_token_encrypted);
-  const client = createSlackClient(botToken);
+  let botToken: string | null = null;
 
   try {
+    botToken = decryptSecret(context.bot_token_encrypted);
+    const client = createSlackClient(botToken);
     const response = await client.conversations.create({
       is_private: false,
       name: desiredChannelName,
@@ -130,7 +131,7 @@ export async function provisionSlackChannelForChat(chatId: string) {
       "data" in error &&
       (error as { data?: { error?: string } }).data?.error === "name_taken";
 
-    if (nameTaken) {
+    if (nameTaken && botToken) {
       const existing = await findPublicChannelByName(botToken, desiredChannelName);
       if (existing?.id) {
         await withTransaction(async (tx) => {
@@ -155,6 +156,11 @@ export async function provisionSlackChannelForChat(chatId: string) {
         where id = ${chatId}::uuid
       `;
     });
-    throw error;
+    console.error("Slack provisioning failed", {
+      chatId,
+      desiredChannelName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { status: "error" as const };
   }
 }
