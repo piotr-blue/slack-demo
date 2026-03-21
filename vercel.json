@@ -1,6 +1,6 @@
 {
   "functions": {
-    "app/api/queues/slack-inbound/route.ts": {
+    "api/queues/slack-inbound.ts": {
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -9,7 +9,7 @@
         }
       ]
     },
-    "app/api/queues/slack-outbound/route.ts": {
+    "api/queues/slack-outbound.ts": {
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -18,7 +18,7 @@
         }
       ]
     },
-    "app/api/queues/slack-provision/route.ts": {
+    "api/queues/slack-provision.ts": {
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -26,15 +26,6 @@
           "topic": "slack-provision"
         }
       ]
-    },
-    "app/api/slack/events/route.ts": {
-      "maxDuration": 10
-    },
-    "app/api/slack/install/route.ts": {
-      "maxDuration": 10
-    },
-    "app/api/slack/oauth/callback/route.ts": {
-      "maxDuration": 10
     }
   }
 }

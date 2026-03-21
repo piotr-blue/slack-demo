@@ -23,6 +23,7 @@ const queueClient = new QueueClient({
 });
 
 export const handleQueueCallback = queueClient.handleCallback;
+export const handleQueueNodeCallback = queueClient.handleNodeCallback;
 
 async function sendMessage<T>(
   topic: string,
