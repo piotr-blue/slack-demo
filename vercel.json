@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/queues/slack-inbound.ts": {
+    "api/queues/slack-inbound.js": {
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -9,7 +9,7 @@
         }
       ]
     },
-    "api/queues/slack-outbound.ts": {
+    "api/queues/slack-outbound.js": {
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -18,7 +18,7 @@
         }
       ]
     },
-    "api/queues/slack-provision.ts": {
+    "api/queues/slack-provision.js": {
       "maxDuration": 60,
       "experimentalTriggers": [
         {

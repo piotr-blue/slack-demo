@@ -185,9 +185,9 @@ Optional:
 
 ## Queue topics / consumers
 
-- `slack-inbound` → `api/queues/slack-inbound.ts`
-- `slack-outbound` → `api/queues/slack-outbound.ts`
-- `slack-provision` → `api/queues/slack-provision.ts`
+- `slack-inbound` → `api/queues/slack-inbound.js`
+- `slack-outbound` → `api/queues/slack-outbound.js`
+- `slack-provision` → `api/queues/slack-provision.js`
 
 ---
 
