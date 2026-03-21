@@ -1,10 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("signup -> create account -> create chat -> send message", async ({ page }) => {
-  if (process.env.RUN_E2E !== "true") {
-    test.skip();
-  }
+test.skip(process.env.RUN_E2E !== "true", "Set RUN_E2E=true to execute smoke flow");
 
+test("signup -> create account -> create chat -> send message", async ({ page }) => {
   const email = process.env.E2E_EMAIL ?? `demo-${Date.now()}@example.com`;
   const password = process.env.E2E_PASSWORD ?? "password123";
   const accountName = `Acme ${Date.now()}`;
