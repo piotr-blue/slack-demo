@@ -5,9 +5,10 @@ const queueClient = new QueueClient({
 });
 
 async function forwardToInternalQueue(routeName, message) {
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : process.env.APP_URL;
+  const baseUrl = (
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")
+  ).replace(/\/$/, "");
   if (!baseUrl) {
     throw new Error("Missing APP_URL or VERCEL_URL for queue forwarding");
   }
