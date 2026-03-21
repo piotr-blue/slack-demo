@@ -1,7 +1,6 @@
 {
   "functions": {
     "app/api/queues/slack-inbound/route.ts": {
-      "runtime": "nodejs22.x",
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -11,7 +10,6 @@
       ]
     },
     "app/api/queues/slack-outbound/route.ts": {
-      "runtime": "nodejs22.x",
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -21,7 +19,6 @@
       ]
     },
     "app/api/queues/slack-provision/route.ts": {
-      "runtime": "nodejs22.x",
       "maxDuration": 60,
       "experimentalTriggers": [
         {
@@ -31,15 +28,12 @@
       ]
     },
     "app/api/slack/events/route.ts": {
-      "runtime": "nodejs22.x",
       "maxDuration": 10
     },
     "app/api/slack/install/route.ts": {
-      "runtime": "nodejs22.x",
       "maxDuration": 10
     },
     "app/api/slack/oauth/callback/route.ts": {
-      "runtime": "nodejs22.x",
       "maxDuration": 10
     }
   }
