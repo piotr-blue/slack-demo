@@ -1,88 +1,89 @@
 # slack-demo-app
 
-Production-shaped multi-tenant chat demo built with:
-
-- Next.js App Router + TypeScript + Tailwind CSS
-- Supabase Auth + Postgres + Realtime Broadcast
-- `postgres.js` transactional write paths (`prepare: false`)
-- Slack OAuth + Events API + Web API
-- Vercel Queues (`slack-inbound`, `slack-outbound`, `slack-provision`)
-
----
+Multi-tenant chat app (Next.js + Supabase + Vercel Queues) with **private Slack DM/thread sync**.
 
 ## Architecture summary
 
-### Core product flow
+### Core app model
 
-- A signed-in user can belong to multiple accounts (tenants).
-- First onboarding flow creates:
-  1. account
-  2. account membership (`owner`)
-  3. default `general` chat
-- Each chat has immutable message inserts.
-- Every human message creates deterministic assistant reply:
+- A user can belong to multiple accounts (tenants).
+- Chats are **user-owned** (`chats.owner_user_id`).
+- A user can only see and interact with chats they own.
+- Each human message gets deterministic assistant response:
   - `Right, <exact original text>`
 
-### Slack sync model
+### Slack model (v1)
 
-- Slack connection is per-account.
-- Every chat maps to one public Slack channel when provisioning completes.
-- App-origin human messages:
-  - are inserted immediately in Postgres
-  - assistant reply is inserted in same transaction
-  - Slack mirror work is queued (never blocks UI)
-- Slack-origin human messages:
-  - are persisted as `origin = slack`
-  - assistant reply is inserted
-  - only assistant message is queued back to Slack (prevents loops)
-- Bot/subtype Slack events are ignored.
-- Inbound event idempotency uses `slack_event_receipts`.
-- Outbound retries + throttling use `slack_outbox`, `slack_workspace_throttle`, `slack_channel_throttle`.
+This repo uses:
 
-### Realtime model
+1. **Workspace installation** (one Slack app install per customer workspace)
+2. **User-level linking** (each app user links their Slack identity)
+3. **One private DM per linked user** (bot ↔ user)
+4. **Multiple chats as threads** in that user DM (`chats.slack_thread_ts`)
 
-- Message insert trigger uses `realtime.broadcast_changes`.
-- Topic format: `room:<chat_id>:messages`.
-- Client subscribes to private channel per active chat.
-- Authorization enforced via `realtime.messages` RLS policy + helper function.
+It does **not** use “one public channel per chat”.
 
----
+### Why this is correct for Alice/Bob privacy
 
-## Repository structure
+- Alice and Bob can be in the same customer workspace.
+- Alice links her Slack user → app syncs only Alice-owned chats to Alice’s DM.
+- Bob links his Slack user → app syncs only Bob-owned chats to Bob’s DM.
+- No workspace-shared public channel is used as primary sync transport.
 
-- `app/` — pages, API routes, queue consumers
-- `lib/` — domain logic (db, auth, messages, queue, slack, crypto)
-- `supabase/migrations/` — schema + RLS + realtime triggers/policies
-- `tests/unit` — deterministic reply / signature / channel-name tests
-- `tests/integration` — app message transaction + inbound idempotency tests
-- `tests/e2e` — Playwright smoke scenario
-- `slack-app-manifest.yaml` — Slack app manifest template
-- `vercel.json` — function + queue trigger config
+### Queue/workers
+
+- `slack-inbound`: handles incoming Slack DM events (`message.im`)
+- `slack-outbound`: sends mirrored messages to user DM threads
+- `slack-provision`: ensures DM channel + root thread exist for a chat
+
+All Slack sync is async via queue (UI path remains non-blocking).
 
 ---
 
 ## Data model (high level)
 
-Main tables:
+Main Slack-related tables:
 
-- `accounts`
-- `account_members`
-- `profiles`
-- `chats`
-- `messages`
-- `slack_installations`
+- `slack_workspace_installations`
+- `slack_user_links`
 - `slack_event_receipts`
 - `slack_outbox`
 - `slack_workspace_throttle`
 - `slack_channel_throttle`
 
-See SQL under `supabase/migrations`.
+Key chat fields:
+
+- `chats.owner_user_id`
+- `chats.slack_thread_ts`
+- `chats.slack_status`
+
+---
+
+## Slack app setup
+
+Use `slack-app-manifest.yaml` and replace:
+
+- OAuth redirect URL: `https://<APP_URL>/api/slack/oauth/callback`
+- Events request URL: `https://<APP_URL>/api/slack/events`
+
+Required bot scopes:
+
+- `chat:write`
+- `im:read`
+- `im:history`
+- `im:write`
+
+Required bot event subscription:
+
+- `message.im`
+
+Socket mode is disabled.
 
 ---
 
 ## Environment variables
 
-Use `.env.example` as template.
+Use `.env.example`.
 
 Required:
 
@@ -98,54 +99,34 @@ Required:
 
 Optional:
 
-- `DISABLE_QUEUE` (`true` disables queue sends in local/testing)
-- `VERCEL_REGION` (defaults to `iad1`)
-- `RUN_E2E` (set `true` to enable Playwright smoke)
-- `E2E_BASE_URL`, `E2E_EMAIL`, `E2E_PASSWORD`
+- `DISABLE_QUEUE`
+- `VERCEL_REGION`
+- `RUN_E2E`, `E2E_BASE_URL`, `E2E_EMAIL`, `E2E_PASSWORD`
 
 ---
 
-## Local setup (exact order)
+## Local setup
 
-1. **Install dependencies**
+1. Install dependencies:
 
    ```bash
    pnpm install
    ```
 
-2. **Create Supabase project**
-   - Enable Email/Password auth in Supabase Auth settings.
+2. Create Supabase project and enable Email/Password auth.
 
-3. **Apply migrations**
-   - Run the SQL migrations in `supabase/migrations` in order:
-     1. `0001_initial_schema.sql`
-     2. `0002_rls_and_policies.sql`
-     3. `0003_realtime_broadcast.sql`
+3. Apply SQL migrations in order from `supabase/migrations`.
 
-4. **Create Slack app from manifest**
-   - In Slack app settings, create new app from `slack-app-manifest.yaml`.
-   - Replace placeholders:
-     - redirect URL: `https://<your-app-domain>/api/slack/oauth/callback`
-     - events URL: `https://<your-app-domain>/api/slack/events`
-   - Install app to workspace.
+4. Create Slack app from `slack-app-manifest.yaml`, set real URLs, install to workspace.
 
-5. **Configure local env**
-   - Copy `.env.example` to `.env.local`.
-   - Fill all required values.
-   - Generate encryption key:
+5. Configure env:
 
    ```bash
+   cp .env.example .env.local
    openssl rand -base64 32
    ```
 
-6. **Link Vercel project + pull env**
-
-   ```bash
-   vercel link
-   vercel env pull
-   ```
-
-7. **Run app**
+6. Run app:
 
    ```bash
    pnpm dev
@@ -153,41 +134,30 @@ Optional:
 
 ---
 
-## Deploy to Vercel
+## User flows
 
-1. Push repository to GitHub.
-2. Import repo into Vercel.
-3. Add all env vars from `.env.example`.
-4. Ensure `vercel.json` is present (queue triggers are declared there).
-5. Deploy.
-6. Update Slack app URLs to deployed domain:
-   - OAuth callback: `/api/slack/oauth/callback`
-   - Event request URL: `/api/slack/events`
-7. Reinstall Slack app to workspace after URL changes if required by Slack UI.
+### Workspace connect (owner)
 
----
+Settings → **Connect workspace to Slack**  
+This stores/updates `slack_workspace_installations`.
 
-## Slack app configuration checklist
+### User link (individual user)
 
-- Bot scopes:
-  - `chat:write`
-  - `channels:manage`
-  - `channels:read`
-  - `channels:history`
-- Bot event subscriptions:
-  - `message.channels`
-- Socket Mode:
-  - **disabled**
-- Public channels:
-  - used for this demo
+Settings → **Link my Slack user**  
+This stores `slack_user_links` and opens/records DM channel for that user.
 
----
+### Message sync
 
-## Queue topics / consumers
-
-- `slack-inbound` → `api/queues/slack-inbound.js`
-- `slack-outbound` → `api/queues/slack-outbound.js`
-- `slack-provision` → `api/queues/slack-provision.js`
+- App-origin messages:
+  - write app human + assistant rows
+  - enqueue outbox
+  - worker ensures DM + root thread, then posts thread messages
+- Slack-origin DM messages:
+  - accept only `message.im`
+  - resolve linked user by team/user
+  - map by thread or active chat marker
+  - write human + assistant rows
+  - enqueue assistant mirror back to same DM/thread
 
 ---
 
@@ -201,11 +171,3 @@ pnpm test
 pnpm build
 pnpm test:e2e
 ```
-
----
-
-## Testing notes
-
-- Unit + integration tests are fully mocked and do not require real Slack credentials.
-- Playwright smoke test exists at `tests/e2e/smoke.spec.ts`.
-  - It is gated behind `RUN_E2E=true`.

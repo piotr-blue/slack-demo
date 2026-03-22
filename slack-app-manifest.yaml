@@ -13,14 +13,14 @@ oauth_config:
   scopes:
     bot:
       - chat:write
-      - channels:manage
-      - channels:read
-      - channels:history
+      - im:read
+      - im:history
+      - im:write
 settings:
   event_subscriptions:
     request_url: https://YOUR_APP_DOMAIN/api/slack/events
     bot_events:
-      - message.channels
+      - message.im
   interactivity:
     is_enabled: false
   org_deploy_enabled: false
