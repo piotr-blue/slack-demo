@@ -3,8 +3,11 @@ import { getServerEnv } from "@/lib/env";
 
 const MAX_AGE_MS = 10 * 60 * 1000;
 
+export type SlackOAuthStateIntent = "workspace_install" | "user_link";
+
 export type SlackOAuthStatePayload = {
   accountId: string;
+  intent: SlackOAuthStateIntent;
   nonce: string;
   issuedAt: number;
 };
@@ -17,9 +20,13 @@ function signStatePayload(payloadBase64: string) {
   return crypto.createHmac("sha256", getStateSecret()).update(payloadBase64).digest("hex");
 }
 
-export function createSlackOAuthState(accountId: string) {
+export function createSlackOAuthState(input: {
+  accountId: string;
+  intent: SlackOAuthStateIntent;
+}) {
   const payload: SlackOAuthStatePayload = {
-    accountId,
+    accountId: input.accountId,
+    intent: input.intent,
     nonce: crypto.randomUUID(),
     issuedAt: Date.now(),
   };
@@ -49,6 +56,9 @@ export function verifySlackOAuthState(state: string): SlackOAuthStatePayload {
   }
 
   const payload = JSON.parse(Buffer.from(payloadBase64, "base64url").toString("utf8")) as SlackOAuthStatePayload;
+  if (!payload.intent) {
+    payload.intent = "workspace_install";
+  }
   if (Date.now() - payload.issuedAt > MAX_AGE_MS) {
     throw new Error("Slack OAuth state expired");
   }

@@ -14,7 +14,10 @@ export type Chat = {
   name: string;
   slug: string;
   created_by_user_id: string;
+  owner_user_id: string;
   slack_status: SlackStatus;
+  slack_thread_ts: string | null;
+  slack_last_error: string | null;
   slack_channel_id: string | null;
   slack_channel_name: string | null;
   created_at: string;

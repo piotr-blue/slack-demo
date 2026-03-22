@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertInternalQueueSecret } from "@/lib/queue-internal";
-import { provisionSlackChannelForChat } from "@/lib/slack/provision";
+import { provisionSlackDmThreadForChat } from "@/lib/slack/provision";
 
 const schema = z.object({
   message: z.object({
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const result = await provisionSlackChannelForChat(parsed.data.message.chatId);
+  const result = await provisionSlackDmThreadForChat(parsed.data.message.chatId);
 
   return NextResponse.json({ ok: true, result });
 }

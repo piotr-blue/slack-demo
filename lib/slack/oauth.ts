@@ -7,6 +7,9 @@ type OAuthResponse = {
   access_token?: string;
   scope?: string;
   bot_user_id?: string;
+  authed_user?: {
+    id?: string;
+  };
 };
 
 export async function exchangeSlackOAuthCode(input: {
@@ -42,5 +45,6 @@ export async function exchangeSlackOAuthCode(input: {
     botToken: payload.access_token,
     botUserId: payload.bot_user_id ?? null,
     scope: payload.scope ?? null,
+    authedUserId: payload.authed_user?.id ?? null,
   };
 }

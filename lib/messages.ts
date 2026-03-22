@@ -16,9 +16,9 @@ export async function listMessagesForChat(input: {
   return db<Message[]>`
     select m.*
     from messages m
-    join account_members am on am.account_id = m.account_id
+    join chats c on c.id = m.chat_id
     where m.chat_id = ${input.chatId}::uuid
-      and am.user_id = ${input.userId}::uuid
+      and c.owner_user_id = ${input.userId}::uuid
       and m.sort_key < ${before}
     order by m.sort_key desc
     limit ${limit}
@@ -35,22 +35,29 @@ export async function createAppMessageFlow(input: {
       select
         c.id as chat_id,
         c.account_id,
+        c.name as chat_name,
         c.slack_status,
-        c.slack_channel_id,
+        c.slack_thread_ts,
         p.display_name,
-        si.id as installation_id
+        ws.id as installation_id,
+        ws.team_id,
+        sul.id as slack_user_link_id,
+        sul.slack_dm_channel_id
       from chats c
-      join account_members am on am.account_id = c.account_id
       left join profiles p on p.id = ${input.userId}::uuid
       left join lateral (
-        select id
-        from slack_installations
+        select id, team_id
+        from slack_workspace_installations
         where account_id = c.account_id
         order by updated_at desc
         limit 1
-      ) si on true
+      ) ws on true
+      left join slack_user_links sul
+        on sul.account_id = c.account_id
+       and sul.app_user_id = ${input.userId}::uuid
+       and sul.slack_team_id = ws.team_id
       where c.id = ${input.chatId}::uuid
-        and am.user_id = ${input.userId}::uuid
+        and c.owner_user_id = ${input.userId}::uuid
       limit 1
     `;
 
@@ -60,9 +67,12 @@ export async function createAppMessageFlow(input: {
 
     const context = membership[0] as {
       account_id: string;
+      chat_name: string;
       slack_status: "disconnected" | "provisioning" | "ready" | "error";
-      slack_channel_id: string | null;
+      slack_thread_ts: string | null;
       installation_id: string | null;
+      slack_user_link_id: string | null;
+      slack_dm_channel_id: string | null;
       display_name: string | null;
     };
 
@@ -115,18 +125,35 @@ export async function createAppMessageFlow(input: {
 
     const outboxIds: string[] = [];
     const canMirrorToSlack =
-      context.slack_status === "ready" &&
-      Boolean(context.slack_channel_id) &&
+      Boolean(context.slack_user_link_id) &&
       Boolean(context.installation_id);
 
     if (canMirrorToSlack) {
+      await tx`
+        update slack_user_links
+        set active_chat_id = ${input.chatId}::uuid,
+            updated_at = now(),
+            last_error = null
+        where id = ${context.slack_user_link_id!}::uuid
+      `;
+
+      await tx`
+        update chats
+        set slack_status = 'provisioning',
+            slack_last_error = null,
+            updated_at = now()
+        where id = ${input.chatId}::uuid
+      `;
+
       const outboxRows = await tx<{ id: string }[]>`
         insert into slack_outbox (
           account_id,
           chat_id,
           message_id,
+          slack_user_link_id,
           installation_id,
           channel_id,
+          thread_ts,
           kind,
           status
         )
@@ -135,8 +162,10 @@ export async function createAppMessageFlow(input: {
             ${context.account_id}::uuid,
             ${input.chatId}::uuid,
             ${humanMessage.id}::uuid,
+            ${context.slack_user_link_id!}::uuid,
             ${context.installation_id}::uuid,
-            ${context.slack_channel_id!},
+            ${context.slack_dm_channel_id},
+            ${context.slack_thread_ts},
             'mirror_message',
             'pending'
           ),
@@ -144,8 +173,10 @@ export async function createAppMessageFlow(input: {
             ${context.account_id}::uuid,
             ${input.chatId}::uuid,
             ${assistantMessage.id}::uuid,
+            ${context.slack_user_link_id!}::uuid,
             ${context.installation_id}::uuid,
-            ${context.slack_channel_id!},
+            ${context.slack_dm_channel_id},
+            ${context.slack_thread_ts},
             'mirror_message',
             'pending'
           )

@@ -26,7 +26,7 @@ export default async function AccountChatsPage({
     notFound();
   }
 
-  const chats = await listChatsForAccount(account.id);
+  const chats = await listChatsForAccount(account.id, user.id);
   const activeChatId = chatId ?? chats[0]?.id ?? null;
   const activeChat = activeChatId ? await getChatForUser(user.id, activeChatId) : null;
   const initialPageSize = 30;

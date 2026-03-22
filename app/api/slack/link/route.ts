@@ -26,22 +26,38 @@ export async function GET(request: Request) {
   }
 
   const db = getDb();
-  const membership = await db`
-    select role
-    from account_members
-    where account_id = ${parsed.data.accountId}::uuid
-      and user_id = ${auth.user.id}::uuid
-    limit 1
-  `;
-  if (membership.length === 0 || membership[0].role !== "owner") {
+  const [membership, workspaceInstallation] = await Promise.all([
+    db`
+      select 1
+      from account_members
+      where account_id = ${parsed.data.accountId}::uuid
+        and user_id = ${auth.user.id}::uuid
+      limit 1
+    `,
+    db`
+      select id
+      from slack_workspace_installations
+      where account_id = ${parsed.data.accountId}::uuid
+      order by updated_at desc
+      limit 1
+    `,
+  ]);
+
+  if (membership.length === 0) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (workspaceInstallation.length === 0) {
+    return NextResponse.json(
+      { error: "Connect workspace to Slack before linking your user" },
+      { status: 400 },
+    );
   }
 
   const env = getServerEnv();
   const redirectUri = `${env.APP_URL}/api/slack/oauth/callback`;
   const { state, nonce } = createSlackOAuthState({
     accountId: parsed.data.accountId,
-    intent: "workspace_install",
+    intent: "user_link",
   });
   const slackAuthorize = new URL("https://slack.com/oauth/v2/authorize");
   slackAuthorize.searchParams.set("client_id", env.SLACK_CLIENT_ID);

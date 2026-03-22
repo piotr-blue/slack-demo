@@ -63,6 +63,9 @@ with check (
 drop policy if exists slack_workspace_installations_select_member on slack_workspace_installations;
 drop policy if exists slack_workspace_installations_insert_owner on slack_workspace_installations;
 drop policy if exists slack_workspace_installations_update_owner on slack_workspace_installations;
+drop policy if exists slack_installations_select_member on slack_workspace_installations;
+drop policy if exists slack_installations_insert_member on slack_workspace_installations;
+drop policy if exists slack_installations_update_member on slack_workspace_installations;
 
 create policy slack_workspace_installations_select_member
 on slack_workspace_installations

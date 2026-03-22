@@ -9,6 +9,8 @@ function isSlackHumanMessageEvent(envelope: SlackEventEnvelope) {
   const event = envelope.event;
   if (!event || event.type !== "message") return false;
   if (!event.channel || !event.user || !event.text) return false;
+  if (event.channel_type && event.channel_type !== "im") return false;
+  if (!event.channel.startsWith("D")) return false;
   if (event.subtype) return false;
   if (event.bot_id) return false;
   return true;
@@ -24,6 +26,7 @@ export async function processSlackInboundEvent(envelope: SlackEventEnvelope) {
   const channel = event.channel as string;
   const slackUser = event.user as string;
   const text = event.text as string;
+  const eventThreadTs = (event.thread_ts as string | undefined) ?? null;
 
   const result = await withTransaction(async (tx) => {
     const insertedReceipt = await tx<{ event_id: string }[]>`
@@ -37,35 +40,104 @@ export async function processSlackInboundEvent(envelope: SlackEventEnvelope) {
       return { ignored: true as const };
     }
 
-    const chatRows = await tx<{
-      chat_id: string;
+    const linkRows = await tx<{
+      slack_user_link_id: string;
       account_id: string;
+      app_user_id: string;
+      active_chat_id: string | null;
+      dm_channel_id: string | null;
       installation_id: string;
       bot_user_id: string | null;
-      channel_id: string;
     }[]>`
       select
-        c.id as chat_id,
-        c.account_id,
-        si.id as installation_id,
-        si.bot_user_id,
-        c.slack_channel_id as channel_id
-      from chats c
-      join slack_installations si on si.account_id = c.account_id
-      where c.slack_channel_id = ${channel}
-        and si.team_id = ${teamId!}
-      order by si.updated_at desc
+        sul.id as slack_user_link_id,
+        sul.account_id,
+        sul.app_user_id,
+        sul.active_chat_id,
+        sul.slack_dm_channel_id as dm_channel_id,
+        ws.id as installation_id,
+        ws.bot_user_id
+      from slack_user_links sul
+      join slack_workspace_installations ws
+        on ws.account_id = sul.account_id
+       and ws.team_id = sul.slack_team_id
+      where sul.slack_team_id = ${teamId!}
+        and sul.slack_user_id = ${slackUser}
+      order by ws.updated_at desc
       limit 1
     `;
 
-    const chat = chatRows[0];
-    if (!chat) {
+    const link = linkRows[0];
+    if (!link) {
       return { ignored: true as const };
     }
 
-    if (chat.bot_user_id && event.user === chat.bot_user_id) {
+    if (link.bot_user_id && event.user === link.bot_user_id) {
       return { ignored: true as const };
     }
+
+    if (!link.dm_channel_id || link.dm_channel_id !== channel) {
+      await tx`
+        update slack_user_links
+        set slack_dm_channel_id = ${channel},
+            updated_at = now(),
+            last_error = null
+        where id = ${link.slack_user_link_id}::uuid
+      `;
+    }
+
+    let chatRows: Array<{ chat_id: string; slack_thread_ts: string | null }> = [];
+    if (eventThreadTs) {
+      chatRows = await tx`
+        select id as chat_id, slack_thread_ts
+        from chats
+        where account_id = ${link.account_id}::uuid
+          and owner_user_id = ${link.app_user_id}::uuid
+          and slack_thread_ts = ${eventThreadTs}
+        limit 1
+      `;
+    }
+
+    if (chatRows.length === 0 && link.active_chat_id) {
+      chatRows = await tx`
+        select id as chat_id, slack_thread_ts
+        from chats
+        where id = ${link.active_chat_id}::uuid
+          and account_id = ${link.account_id}::uuid
+          and owner_user_id = ${link.app_user_id}::uuid
+        limit 1
+      `;
+    }
+
+    const chat = chatRows[0];
+    if (!chat) {
+      await tx`
+        update slack_user_links
+        set last_error = 'No active chat mapping for inbound DM',
+            updated_at = now()
+        where id = ${link.slack_user_link_id}::uuid
+      `;
+      return { ignored: true as const };
+    }
+
+    if (eventThreadTs && !chat.slack_thread_ts) {
+      await tx`
+        update chats
+        set slack_thread_ts = ${eventThreadTs},
+            slack_status = 'ready',
+            slack_last_error = null,
+            updated_at = now()
+        where id = ${chat.chat_id}::uuid
+      `;
+    }
+
+    await tx`
+      update slack_user_links
+      set active_chat_id = ${chat.chat_id}::uuid,
+          last_error = null,
+          updated_at = now()
+      where id = ${link.slack_user_link_id}::uuid
+    `;
 
     const humanMessageRows = await tx<{ id: string; text: string }[]>`
       insert into messages (
@@ -73,15 +145,17 @@ export async function processSlackInboundEvent(envelope: SlackEventEnvelope) {
         chat_id,
         role,
         origin,
+        author_user_id,
         slack_user_id,
         text,
         metadata
       )
       values (
-        ${chat.account_id}::uuid,
+        ${link.account_id}::uuid,
         ${chat.chat_id}::uuid,
         'human',
         'slack',
+        ${link.app_user_id}::uuid,
         ${slackUser},
         ${text},
         ${tx.json({ source: "slack" })}
@@ -100,7 +174,7 @@ export async function processSlackInboundEvent(envelope: SlackEventEnvelope) {
         metadata
       )
       values (
-        ${chat.account_id}::uuid,
+        ${link.account_id}::uuid,
         ${chat.chat_id}::uuid,
         'assistant',
         'system',
@@ -115,17 +189,21 @@ export async function processSlackInboundEvent(envelope: SlackEventEnvelope) {
         account_id,
         chat_id,
         message_id,
+        slack_user_link_id,
         installation_id,
         channel_id,
+        thread_ts,
         kind,
         status
       )
       values (
-        ${chat.account_id}::uuid,
+        ${link.account_id}::uuid,
         ${chat.chat_id}::uuid,
         ${assistantRows[0].id}::uuid,
-        ${chat.installation_id}::uuid,
-        ${chat.channel_id!},
+        ${link.slack_user_link_id}::uuid,
+        ${link.installation_id}::uuid,
+        ${channel},
+        ${eventThreadTs ?? chat.slack_thread_ts},
         'mirror_message',
         'pending'
       )
@@ -135,7 +213,7 @@ export async function processSlackInboundEvent(envelope: SlackEventEnvelope) {
 
     return {
       ignored: false as const,
-        outboxIds: outboxRows.map((row: { id: string }) => row.id),
+      outboxIds: outboxRows.map((row: { id: string }) => row.id),
     };
   });
 
