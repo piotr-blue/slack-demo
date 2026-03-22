@@ -18,8 +18,6 @@ export type Chat = {
   slack_status: SlackStatus;
   slack_thread_ts: string | null;
   slack_last_error: string | null;
-  slack_channel_id: string | null;
-  slack_channel_name: string | null;
   created_at: string;
   updated_at: string;
 };
