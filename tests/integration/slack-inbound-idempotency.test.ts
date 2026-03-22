@@ -31,16 +31,24 @@ describe("processSlackInboundEvent idempotency", () => {
           }
           return [];
         }
-        if (sql.includes("from chats c")) {
+        if (sql.includes("from slack_user_links sul")) {
           return [
             {
-              chat_id: "chat-1",
+              slack_user_link_id: "link-1",
               account_id: "acc-1",
+              app_user_id: "app-user-1",
+              active_chat_id: "chat-1",
+              dm_channel_id: "D123",
               installation_id: "inst-1",
               bot_user_id: "U_BOT",
-              channel_id: "C123",
             },
           ];
+        }
+        if (sql.includes("select id as chat_id, slack_thread_ts") && sql.includes("where id =")) {
+          return [{ chat_id: "chat-1", slack_thread_ts: "1710000000.000001" }];
+        }
+        if (sql.includes("update slack_user_links")) {
+          return [];
         }
         if (sql.includes("insert into messages") && sql.includes("'human'")) {
           return [{ id: "human-1", text: "hello from slack" }];
@@ -64,7 +72,8 @@ describe("processSlackInboundEvent idempotency", () => {
       event_id: "evt-1",
       event: {
         type: "message",
-        channel: "C123",
+        channel: "D123",
+        channel_type: "im",
         user: "U123",
         text: "hello from slack",
       },

@@ -29,11 +29,19 @@ describe("createAppMessageFlow", () => {
             {
               account_id: "acc-1",
               slack_status: "ready",
-              slack_channel_id: "C123",
+              slack_thread_ts: "1710000000.000001",
               installation_id: "inst-1",
+              slack_user_link_id: "link-1",
+              slack_dm_channel_id: "D123",
               display_name: "Alice",
             },
           ];
+        }
+        if (sql.includes("update slack_user_links")) {
+          return [];
+        }
+        if (sql.includes("update chats") && sql.includes("slack_status = 'provisioning'")) {
+          return [];
         }
         if (sql.includes("insert into messages") && sql.includes("'human'")) {
           return [{ id: "msg-human", text: "hello" }];
@@ -73,8 +81,10 @@ describe("createAppMessageFlow", () => {
             {
               account_id: "acc-1",
               slack_status: "disconnected",
-              slack_channel_id: null,
+              slack_thread_ts: null,
               installation_id: null,
+              slack_user_link_id: null,
+              slack_dm_channel_id: null,
               display_name: "Alice",
             },
           ];
